@@ -25,3 +25,12 @@ reports/
 
 # Model checkpoints (remove this line if you want to upload the model)
 *.pth
+
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+db.sqlite3
+media/
+*.log

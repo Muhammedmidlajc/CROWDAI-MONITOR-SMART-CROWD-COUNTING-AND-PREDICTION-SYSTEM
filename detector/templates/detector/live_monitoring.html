@@ -1,0 +1,1005 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Stream Monitoring & Forecasting | CrowdAI Monitor</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Professional CCTV Dashboard Stylesheet (with cache-busting) -->
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v={% now "U" %}">
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark glass-nav">
+        <div class="container-fluid px-lg-4">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-users-viewfinder"></i>
+                <span>CrowdAI Monitor</span>
+                <span class="brand-badge ms-1">Enterprise</span>
+            </a>
+            <div class="d-flex gap-2 align-items-center">
+                <a href="{% url 'home' %}" class="nav-tab-btn">
+                    <i class="fas fa-image"></i> Image Mode
+                </a>
+                <a href="{% url 'live_monitoring' %}" class="nav-tab-btn active">
+                    <i class="fas fa-video"></i> Live Stream Monitor
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Dashboard Container -->
+    <main class="py-3">
+        <div class="container-fluid px-lg-4">
+
+            <!-- TOP KPI METRICS BAR (BALANCED CCTV TELEMETRY) -->
+            <div class="kpi-grid">
+                <!-- 1. Current Live Count -->
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Current Crowd</span>
+                        <span class="kpi-val text-info" id="lblCurrentCount">0</span>
+                        <span class="kpi-sub">
+                            <i class="fas fa-eye text-info"></i> In-frame estimate
+                        </span>
+                    </div>
+                    <div class="kpi-icon-pill kpi-icon-cyan">
+                        <i class="fas fa-users"></i>
+                    </div>
+                </div>
+
+                <!-- 2. Density Level -->
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Density Level</span>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <span class="badge bg-primary px-3 py-1" id="lblDensityLevel" style="font-size: 13px;">Low</span>
+                        </div>
+                        <span class="kpi-sub" id="lblDensitySub">Threshold: Safe</span>
+                    </div>
+                    <div class="kpi-icon-pill kpi-icon-emerald">
+                        <i class="fas fa-gauge-high"></i>
+                    </div>
+                </div>
+
+                <!-- 3. Occupancy Rate -->
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Occupancy Rate</span>
+                        <span class="kpi-val" id="lblCurrentOccupancyPct">0.0%</span>
+                        <span class="kpi-sub" id="lblOccupancyStatus">Low Occupancy</span>
+                    </div>
+                    <div class="kpi-icon-pill kpi-icon-amber">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                </div>
+
+                <!-- 4. Projected Future Count -->
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Future Forecast</span>
+                        <span class="kpi-val text-purple" id="lblFutureCount" style="color: #c084fc;">--</span>
+                        <span class="kpi-sub">
+                            Next interval (<span id="lblNextHorizonSec">+3s</span>)
+                        </span>
+                    </div>
+                    <div class="kpi-icon-pill kpi-icon-purple">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                </div>
+
+                <!-- 5. Velocity & Trend -->
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Crowd Velocity</span>
+                        <span class="kpi-val" id="lblTrendDirection">Stable</span>
+                        <span class="kpi-sub">
+                            Rate: <b id="lblVelocityPerMin" class="text-info ms-1">+0.0</b>/min
+                        </span>
+                    </div>
+                    <div class="kpi-icon-pill kpi-icon-cyan">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- UNIFIED STREAM CONTROL TOOLBAR (ALIGNED 40px HEIGHTS) -->
+            <div class="cctv-toolbar">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    
+                    <!-- Left: Stream Source Selector -->
+                    <div class="toolbar-field-group">
+                        <span class="toolbar-label"><i class="fas fa-video text-info me-1"></i> Stream Source:</span>
+                        <div class="control-pill-group">
+                            <button type="button" class="control-pill-btn active" id="btnSourceWebcam" onclick="setSource('webcam')">
+                                <i class="fas fa-camera"></i> Live Webcam
+                            </button>
+                            <button type="button" class="control-pill-btn" id="btnSourceFile" onclick="setSource('file')">
+                                <i class="fas fa-file-video"></i> Video File
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Camera Device Selector (Populated when multiple cameras like DroidCam/Phone are detected) -->
+                    <div id="cameraSelectWrapper" class="d-none align-items-center gap-1 ms-1">
+                        <span class="toolbar-label"><i class="fas fa-mobile-screen text-info me-1"></i> Camera:</span>
+                        <select id="cameraDeviceSelect" class="form-select form-select-sm" 
+                                style="max-width: 190px; background: rgba(15, 23, 42, 0.9); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 20px; font-size: 0.78rem; padding: 3px 10px;" 
+                                onchange="onCameraDeviceChanged(this.value)">
+                        </select>
+                    </div>
+
+                    <!-- Hidden Video File Input -->
+                    <input type="file" id="videoFileInput" accept="video/mp4,video/webm,video/avi" style="display: none;" onchange="handleVideoFileSelected(event)">
+
+                    <!-- Middle: Parameters (Interval & Capacity) -->
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <div class="toolbar-field-group">
+                            <span class="toolbar-label"><i class="fas fa-stopwatch text-info me-1"></i> Interval:</span>
+                            <div class="toolbar-input-box">
+                                <input type="number" id="intervalInput" value="3" min="1" max="30" step="1">
+                                <span>sec</span>
+                            </div>
+                        </div>
+
+                        <div class="toolbar-field-group">
+                            <span class="toolbar-label"><i class="fas fa-building text-info me-1"></i> Capacity:</span>
+                            <div class="toolbar-input-box">
+                                <input type="number" id="capacityInput" value="100" min="1" step="5">
+                                <span>people</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Execution & Action Buttons -->
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" id="btnStartMonitoring" class="btn-cctv-primary" onclick="toggleMonitoring()">
+                            <i class="fas fa-play"></i> Start Monitoring
+                        </button>
+                        <button type="button" id="btnCaptureNow" class="btn-cctv-capture" onclick="captureManualFrame()" title="Capture and analyze a single frame immediately">
+                            <i class="fas fa-camera"></i> Capture Frame
+                        </button>
+                        <button type="button" id="btnResetSession" class="btn-cctv-outline" onclick="resetSession()" title="Reset Session Telemetry">
+                            <i class="fas fa-rotate"></i> Reset
+                        </button>
+                        <a id="btnDownloadReport" href="#" class="btn btn-danger btn-sm px-3 disabled shadow-sm" style="height: 40px; display: inline-flex; align-items: center; border-radius: var(--radius-md);" title="Download Official PDF Report">
+                            <i class="fas fa-file-pdf me-1"></i> Report
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- SYMMETRICAL DUAL VIEWPORTS (EQUAL 400px HEIGHT) -->
+            <div class="row g-3 mb-3">
+                <!-- 1. Raw Video Stream Panel -->
+                <div class="col-lg-6">
+                    <div class="cctv-panel">
+                        <div class="cctv-panel-header">
+                            <h6 class="cctv-panel-title">
+                                <i class="fas fa-video text-info"></i> Raw Video Stream
+                            </h6>
+                            <span id="streamStatusBadge" class="hud-badge">
+                                <i class="fas fa-circle-pause text-secondary"></i> STANDBY
+                            </span>
+                        </div>
+
+                        <div class="stream-viewport-container">
+                            <video id="videoElement" class="stream-video" autoplay playsinline muted></video>
+                            
+                            <!-- Clean Standby Overlay (No popup alerts on load!) -->
+                            <div id="webcamStandbyOverlay" class="viewport-standby-overlay">
+                                <i class="fas fa-camera fa-2x mb-2 text-info opacity-75"></i>
+                                <h6 class="text-white">Camera Feed Standby</h6>
+                                <p class="small text-white-50 mb-3" id="webcamStandbyMsg">
+                                    Click below to connect webcam or select "Video File" to load recorded footage.
+                                </p>
+                                <button type="button" class="btn btn-outline-info btn-sm rounded-pill px-3" onclick="initWebcam()">
+                                    <i class="fas fa-power-off me-1"></i> Connect Webcam
+                                </button>
+                            </div>
+
+                            <div class="hud-overlay" id="videoHud" style="display: none;">
+                                <span class="hud-badge" id="cameraNameBadge">
+                                    <i class="fas fa-video"></i> Ready
+                                </span>
+                                <span class="hud-badge" id="fpsBadge">
+                                    <i class="fas fa-clock"></i> Next: <span id="countdownText">3.0s</span>
+                                </span>
+                            </div>
+
+                            <div class="countdown-bar-container">
+                                <div id="countdownBar" class="countdown-bar"></div>
+                            </div>
+                        </div>
+
+                        <div class="cctv-panel-footer">
+                            <span>Target Space: <b class="text-white" id="lblSpaceCapacity">100</b> people</span>
+                            <span id="videoFileBadge" class="d-none text-info small">
+                                <i class="fas fa-file-video me-1"></i> <span id="videoFileName">file.mp4</span>
+                            </span>
+                            <span>Sampling Interval: <b class="text-white" id="lblIntervalSec">3s</b></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Stage 1 Spatial AI Estimation Output Panel (Equal Height) -->
+                <div class="col-lg-6">
+                    <div class="cctv-panel">
+                        <div class="cctv-panel-header">
+                            <h6 class="cctv-panel-title">
+                                <i class="fas fa-brain text-primary"></i> Stage 1: Spatial Estimation Output
+                            </h6>
+                            <span id="stage1ModelBadge" class="hud-badge">
+                                <i class="fas fa-microchip text-info"></i> Waiting for Frame
+                            </span>
+                        </div>
+
+                        <div class="stream-viewport-container" id="resultViewport">
+                            <img id="processedFrameImg" class="stream-video" src="" alt="Analyzed Frame Output" style="display: none; object-fit: contain;">
+                            
+                            <div id="resultPlaceholder" class="viewport-standby-overlay">
+                                <i class="fas fa-users-viewfinder fa-2x mb-2 text-primary opacity-75"></i>
+                                <h6 class="text-white">AI Detection Stream</h6>
+                                <p class="small text-white-50 mb-0">
+                                    Bounding boxes or MC-CNN density regression maps appear here when monitoring is active.
+                                </p>
+                            </div>
+
+                            <div class="hud-overlay" id="resultHud" style="display: none;">
+                                <span class="hud-badge" id="frameNumberBadge">Frame #0</span>
+                                <span class="hud-badge" id="frameTimestampBadge">00:00:00</span>
+                            </div>
+                        </div>
+
+                        <div class="cctv-panel-footer">
+                            <span>YOLO: <b class="text-white" id="lblYoloCount">--</b></span>
+                            <span>MC-CNN: <b class="text-white" id="lblMccnnCount">--</b></span>
+                            <span>Active Architecture: <b class="text-info" id="lblModelUsed">Waiting</b></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1. CAPTURED VIDEO FRAMES & ANALYSIS LOG (SHOWN DIRECTLY AFTER VIDEO VIEWPORTS) -->
+            <div class="predictive-card p-3 mb-3" id="capturedFramesCard">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <h6 class="fw-bold mb-0 text-white">
+                            <i class="fas fa-layer-group text-info me-2"></i>
+                            Captured Video Frames & Analysis Log
+                        </h6>
+                        <span class="badge bg-secondary px-2 py-1 small" id="lblTotalFramesBadge">0 frames captured</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-outline-info btn-sm py-0 px-2 rounded-pill" onclick="captureManualFrame()" style="font-size: 11px;">
+                            <i class="fas fa-camera me-1"></i> Capture Frame
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 rounded-pill" onclick="toggleHistoryTable()" style="font-size: 11px;">
+                            <i class="fas fa-eye me-1"></i> <span id="btnToggleHistoryText">Collapse Log</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="historyTableContainer" class="table-responsive table-cctv" style="max-height: 230px; overflow-y: auto;">
+                    <table class="table table-dark table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Frame #</th>
+                                <th>Timestamp</th>
+                                <th>Count</th>
+                                <th>Architecture</th>
+                                <th>Density Level</th>
+                                <th>Occupancy %</th>
+                                <th>Status</th>
+                                <th>Preview</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="8" class="text-center text-white-50 py-3 small">
+                                    No frames captured yet. Use "Capture Frame" or "Start Monitoring" above to capture video frames.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. FUTURE CROWD DENSITY PREDICTION & FORECASTING DETAILS (AFTER CAPTURED FRAMES) -->
+            <div class="predictive-card p-3 mb-4" id="futurePredictionCard">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                    <div>
+                        <h6 class="fw-bold d-inline align-middle mb-0 text-white">
+                            <i class="fas fa-chart-line text-purple me-2" style="color: #a855f7;"></i>
+                            Future Crowd Density Prediction & Forecasting Details
+                        </h6>
+                        <span class="text-white-50 small ms-2 d-none d-md-inline">
+                            Temporal time-series forecasting of crowd density extrapolated from captured frames
+                        </span>
+                    </div>
+                    <div>
+                        <span id="riskAlertBadge" class="risk-badge risk-normal">
+                            <i class="fas fa-shield-check me-1"></i> Normal
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Standby prompt before frames are captured -->
+                <div id="predictionWaitingState" class="text-center py-4 px-3" style="background: rgba(255,255,255,0.02); border-radius: var(--radius-md); border: 1px dashed rgba(255,255,255,0.1);">
+                    <i class="fas fa-hourglass-half fa-2x text-info opacity-75 mb-2"></i>
+                    <h6 class="text-white mb-1">Awaiting Captured Video Frames</h6>
+                    <p class="text-white-50 small mb-0" style="max-width: 620px; margin: 0 auto;">
+                        Crowd density predictions for future intervals (expected count, density category, occupancy rate, and movement flow) will be computed and displayed here after frames are captured.
+                    </p>
+                </div>
+
+                <!-- Active Future Prediction Details (Shown after frames captured) -->
+                <div id="predictionActiveDetails" style="display: none;">
+                    <!-- Key Future Density Metric Cards -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3 col-sm-6">
+                            <div class="p-3 rounded-3 h-100" style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25);">
+                                <span class="text-white-50 small d-block mb-1">Projected Density Level</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-success px-2 py-1 fs-6" id="lblPredDensityLevel">Low</span>
+                                    <span class="text-white-50 small" id="lblPredDensitySub">&lt; 50 people</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 col-sm-6">
+                            <div class="p-3 rounded-3 h-100" style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.25);">
+                                <span class="text-white-50 small d-block mb-1">Expected Crowd Count</span>
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <b class="fs-4 text-info" id="lblPredFutureCount">0</b>
+                                    <span class="text-white-50 small">people</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 col-sm-6">
+                            <div class="p-3 rounded-3 h-100" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25);">
+                                <span class="text-white-50 small d-block mb-1">Projected Occupancy</span>
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <b class="fs-4 text-warning" id="lblPredOccupancyPct">0.0%</b>
+                                    <span class="text-white-50 small" id="lblPredOccupancyStatus">Low Occupancy</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 col-sm-6">
+                            <div class="p-3 rounded-3 h-100" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25);">
+                                <span class="text-white-50 small d-block mb-1">Crowd Flow Velocity</span>
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <b class="fs-5 text-white" id="lblPredVelocity">+0.0/min</b>
+                                    <span class="text-white-50 small" id="lblPredTrendDir">Stable</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Multi-Step Future Horizon Forecast Cards -->
+                    <div class="mb-3">
+                        <span class="text-white-50 small d-block mb-2 fw-semibold">
+                            <i class="fas fa-clock text-info me-1"></i> Future Crowd Density Progression Across Horizons
+                        </span>
+                        <div class="d-flex flex-wrap gap-2" id="horizonChipsContainer">
+                            <div class="horizon-chip">
+                                <div class="chip-label" id="chipLabel1">+3s Horizon</div>
+                                <div class="chip-val" id="chipVal1">0</div>
+                                <div class="chip-sub" id="chipSub1">Density: Low (0%)</div>
+                            </div>
+                            <div class="horizon-chip">
+                                <div class="chip-label" id="chipLabel2">+6s Horizon</div>
+                                <div class="chip-val" id="chipVal2">0</div>
+                                <div class="chip-sub" id="chipSub2">Density: Low (0%)</div>
+                            </div>
+                            <div class="horizon-chip">
+                                <div class="chip-label" id="chipLabel3">+9s Horizon</div>
+                                <div class="chip-val" id="chipVal3">0</div>
+                                <div class="chip-sub" id="chipSub3">Density: Low (0%)</div>
+                            </div>
+                            <div class="horizon-chip">
+                                <div class="chip-label" id="chipLabel4">+12s Horizon</div>
+                                <div class="chip-val" id="chipVal4">0</div>
+                                <div class="chip-sub" id="chipSub4">Density: Low (0%)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Intelligence Advisory & Capacity Headroom -->
+                    <div class="p-3 rounded-3 border border-secondary border-opacity-10" style="background: rgba(255,255,255,0.02);">
+                        <div class="row align-items-center g-3">
+                            <div class="col-lg-8 col-md-7">
+                                <div class="d-flex align-items-start gap-2">
+                                    <i class="fas fa-lightbulb text-warning mt-1"></i>
+                                    <div>
+                                        <span class="fw-semibold text-white small d-block mb-1">AI Future Density Analysis & Advisory</span>
+                                        <p class="text-white-50 small mb-0" id="lblPredNarrative">
+                                            Awaiting sufficient frames to generate forecast narrative.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-4 col-md-5">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="small text-white-50">Safe Headroom Remaining:</span>
+                                    <b class="text-success small" id="lblPredHeadroom">100 people</b>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="small text-white-50">Time-To-Capacity ETA:</span>
+                                    <b class="text-white small" id="lblPredTimeToCapacity">N/A (Density Safe)</b>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="small text-white-50">Forecast Fit / Confidence:</span>
+                                    <b class="text-info small" id="lblPredConfidence">High (R² 1.00)</b>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Off-screen Canvas for Capture -->
+    <canvas id="captureCanvas" style="display: none;"></canvas>
+
+    <!-- Footer -->
+    <footer class="text-center py-3 text-white-50">
+        <div class="container">
+            <p class="small mb-0">
+                © 2026 AI Crowd Density & Occupancy Monitoring System | MSc Computer Science Mini Project
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Dashboard Core JS Engine -->
+    <script>
+        // State variables
+        let currentSource = "webcam";
+        let isMonitoring = false;
+        let sessionId = "stream_" + Math.random().toString(36).substring(2, 10);
+        let intervalSeconds = 3;
+        let maxCapacity = 100;
+        let frameCounter = 0;
+        let captureTimer = null;
+        let countdownTimer = null;
+        let nextCaptureTimestamp = 0;
+        let mediaStream = null;
+
+        // Elements
+        const videoElement = document.getElementById("videoElement");
+        const captureCanvas = document.getElementById("captureCanvas");
+        const processedFrameImg = document.getElementById("processedFrameImg");
+        const resultPlaceholder = document.getElementById("resultPlaceholder");
+        const webcamStandbyOverlay = document.getElementById("webcamStandbyOverlay");
+        const webcamStandbyMsg = document.getElementById("webcamStandbyMsg");
+        const videoHud = document.getElementById("videoHud");
+        const resultHud = document.getElementById("resultHud");
+        const streamStatusBadge = document.getElementById("streamStatusBadge");
+        const countdownBar = document.getElementById("countdownBar");
+        const countdownText = document.getElementById("countdownText");
+        const btnStart = document.getElementById("btnStartMonitoring");
+        const btnDownloadReport = document.getElementById("btnDownloadReport");
+        const videoFileBadge = document.getElementById("videoFileBadge");
+        const videoFileName = document.getElementById("videoFileName");
+
+        // ---------------------------------------------------------------------
+        // Source Selection
+        // ---------------------------------------------------------------------
+        function setSource(source) {
+            currentSource = source;
+            document.getElementById("btnSourceWebcam").classList.toggle("active", source === "webcam");
+            document.getElementById("btnSourceFile").classList.toggle("active", source === "file");
+
+            if (source === "file") {
+                document.getElementById("videoFileInput").click();
+            } else if (source === "webcam") {
+                videoFileBadge.classList.add("d-none");
+                initWebcam();
+            }
+        }
+
+        let currentCameraDeviceId = null;
+
+        async function populateCameraDevices() {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === "videoinput");
+                const wrapper = document.getElementById("cameraSelectWrapper");
+                const select = document.getElementById("cameraDeviceSelect");
+                if (!wrapper || !select) return;
+
+                if (videoDevices.length > 1) {
+                    select.innerHTML = "";
+                    videoDevices.forEach((dev, idx) => {
+                        const opt = document.createElement("option");
+                        opt.value = dev.deviceId;
+                        opt.text = dev.label ? dev.label : `Camera ${idx + 1}`;
+                        if (dev.deviceId === currentCameraDeviceId) {
+                            opt.selected = true;
+                        }
+                        select.appendChild(opt);
+                    });
+                    wrapper.classList.remove("d-none");
+                    wrapper.classList.add("d-flex");
+                } else {
+                    wrapper.classList.add("d-none");
+                    wrapper.classList.remove("d-flex");
+                }
+            } catch (e) {
+                console.warn("Could not enumerate camera devices:", e);
+            }
+        }
+
+        async function onCameraDeviceChanged(deviceId) {
+            currentCameraDeviceId = deviceId;
+            await initWebcam();
+        }
+
+        // Initialize Webcam (Graceful - with multi-device / mobile camera support)
+        async function initWebcam() {
+            stopStreamVideo();
+            webcamStandbyMsg.innerText = "Connecting to camera device...";
+            try {
+                const constraints = {
+                    video: currentCameraDeviceId
+                        ? { deviceId: { exact: currentCameraDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                        : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                };
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = mediaStream;
+                videoElement.play();
+
+                const activeTrack = mediaStream.getVideoTracks()[0];
+                if (activeTrack && activeTrack.getSettings) {
+                    const settings = activeTrack.getSettings();
+                    currentCameraDeviceId = settings.deviceId || currentCameraDeviceId;
+                }
+                await populateCameraDevices();
+                
+                webcamStandbyOverlay.style.display = "none";
+                videoHud.style.display = "flex";
+                const camLabel = (activeTrack && activeTrack.label) ? activeTrack.label : "Live Camera Connected";
+                const displayLabel = camLabel.length > 25 ? camLabel.substring(0, 22) + "..." : camLabel;
+                document.getElementById("cameraNameBadge").innerHTML = `<i class="fas fa-camera text-success"></i> ${displayLabel}`;
+            } catch (err) {
+                console.warn("Camera access note:", err);
+                webcamStandbyOverlay.style.display = "block";
+                videoHud.style.display = "none";
+                webcamStandbyMsg.innerHTML = '<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i> Camera permission required or device unavailable.</span><br>Click button below to retry or switch to "Video File" mode.';
+            }
+        }
+
+        function stopStreamVideo() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            if (videoElement.srcObject) {
+                videoElement.srcObject = null;
+            }
+        }
+
+        function handleVideoFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            stopStreamVideo();
+            const url = URL.createObjectURL(file);
+            videoElement.src = url;
+            videoElement.loop = true;
+            videoElement.play();
+
+            webcamStandbyOverlay.style.display = "none";
+            videoHud.style.display = "flex";
+            videoFileBadge.classList.remove("d-none");
+            videoFileName.innerText = file.name;
+            document.getElementById("cameraNameBadge").innerHTML = `<i class="fas fa-film text-info"></i> ${file.name.substring(0, 16)}...`;
+        }
+
+        // ---------------------------------------------------------------------
+        // Start / Pause Monitoring
+        // ---------------------------------------------------------------------
+        function toggleMonitoring() {
+            if (!isMonitoring) {
+                startMonitoring();
+            } else {
+                pauseMonitoring();
+            }
+        }
+
+        function startMonitoring() {
+            // Auto connect camera if in standby and webcam selected
+            if (currentSource === "webcam" && !mediaStream) {
+                initWebcam();
+            }
+
+            intervalSeconds = parseFloat(document.getElementById("intervalInput").value) || 3.0;
+            maxCapacity = parseInt(document.getElementById("capacityInput").value) || 100;
+
+            document.getElementById("lblSpaceCapacity").innerText = maxCapacity;
+            document.getElementById("lblIntervalSec").innerText = `${intervalSeconds}s`;
+
+            isMonitoring = true;
+            btnStart.innerHTML = '<i class="fas fa-pause"></i> Pause Monitoring';
+            btnStart.classList.replace("btn-cctv-primary", "btn-cctv-outline");
+
+            streamStatusBadge.className = "hud-badge live";
+            streamStatusBadge.innerHTML = '<span class="pulse-dot"></span> LIVE MONITORING';
+
+            // Create backend session
+            fetch("/api/create-session/", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    session_id: sessionId,
+                    max_capacity: maxCapacity,
+                    interval_seconds: intervalSeconds,
+                    source_type: currentSource
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.session_id) {
+                    sessionId = data.session_id;
+                    btnDownloadReport.href = `/download-stream-report/${sessionId}/`;
+                }
+            }).catch(e => console.warn(e));
+
+            scheduleNextCapture();
+        }
+
+        function pauseMonitoring() {
+            isMonitoring = false;
+            btnStart.innerHTML = '<i class="fas fa-play"></i> Start Monitoring';
+            btnStart.classList.replace("btn-cctv-outline", "btn-cctv-primary");
+
+            streamStatusBadge.className = "hud-badge";
+            streamStatusBadge.innerHTML = '<i class="fas fa-circle-pause text-secondary"></i> PAUSED';
+
+            clearTimeout(captureTimer);
+            clearInterval(countdownTimer);
+            countdownBar.style.width = "0%";
+        }
+
+        function scheduleNextCapture() {
+            if (!isMonitoring) return;
+
+            const intervalMs = intervalSeconds * 1000;
+            const startTime = performance.now();
+            nextCaptureTimestamp = startTime + intervalMs;
+
+            clearInterval(countdownTimer);
+            countdownTimer = setInterval(() => {
+                const now = performance.now();
+                const remaining = Math.max(0, (nextCaptureTimestamp - now) / 1000);
+                const progress = Math.min(100, ((intervalMs - (remaining * 1000)) / intervalMs) * 100);
+
+                countdownText.innerText = `${remaining.toFixed(1)}s`;
+                countdownBar.style.width = `${progress}%`;
+
+                if (remaining <= 0) {
+                    clearInterval(countdownTimer);
+                }
+            }, 50);
+
+            captureTimer = setTimeout(async () => {
+                await captureAndProcessFrame();
+                if (isMonitoring) {
+                    scheduleNextCapture();
+                }
+            }, intervalMs);
+        }
+
+        // ---------------------------------------------------------------------
+        // Capture & Send Frame (Interval or Manual)
+        // ---------------------------------------------------------------------
+        async function captureManualFrame() {
+            if (currentSource === "webcam" && !mediaStream) {
+                await initWebcam();
+                await new Promise(r => setTimeout(r, 600));
+            }
+            const btnCap = document.getElementById("btnCaptureNow");
+            let origHtml = '<i class="fas fa-camera"></i> Capture Frame';
+            if (btnCap) {
+                origHtml = btnCap.innerHTML;
+                btnCap.disabled = true;
+                btnCap.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Capturing...';
+            }
+            try {
+                await captureAndProcessFrame();
+            } finally {
+                if (btnCap) {
+                    btnCap.disabled = false;
+                    btnCap.innerHTML = origHtml;
+                }
+            }
+        }
+
+        async function captureAndProcessFrame() {
+            frameCounter++;
+            let frameBase64 = null;
+
+            if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                captureCanvas.width = videoElement.videoWidth;
+                captureCanvas.height = videoElement.videoHeight;
+                const ctx = captureCanvas.getContext("2d");
+                ctx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+                frameBase64 = captureCanvas.toDataURL("image/jpeg", 0.85);
+            }
+
+            if (!frameBase64) {
+                console.warn("Video frame not ready for processing.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("session_id", sessionId);
+            formData.append("frame_base64", frameBase64);
+            formData.append("max_capacity", maxCapacity);
+            formData.append("interval_seconds", intervalSeconds);
+
+            try {
+                const response = await fetch("/api/process-frame/", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    updateDashboard(data);
+                } else {
+                    console.error("Frame processing error:", data.error);
+                }
+            } catch (err) {
+                console.error("Network error while sending frame:", err);
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Update Dashboard with AI Results
+        // ---------------------------------------------------------------------
+        function updateDashboard(data) {
+            btnDownloadReport.classList.remove("disabled");
+            btnDownloadReport.href = `/download-stream-report/${data.session_id}/`;
+
+            // Stage 1 Visuals
+            if (data.result_url) {
+                processedFrameImg.src = data.result_url + "?t=" + Date.now();
+                processedFrameImg.style.display = "block";
+                resultPlaceholder.style.display = "none";
+                resultHud.style.display = "flex";
+            }
+
+            document.getElementById("frameNumberBadge").innerText = `Frame #${data.frame_number}`;
+            document.getElementById("frameTimestampBadge").innerText = data.timestamp;
+            document.getElementById("stage1ModelBadge").innerHTML = `<i class="fas fa-check-circle text-success"></i> ${data.model_used}`;
+
+            document.getElementById("lblYoloCount").innerText = data.yolo_count !== null ? data.yolo_count : "--";
+            document.getElementById("lblMccnnCount").innerText = data.mccnn_count !== null ? data.mccnn_count : "--";
+            document.getElementById("lblModelUsed").innerText = data.model_used;
+
+            // Total Frames Badge
+            const totalFrames = data.total_frames || (data.history ? data.history.length : 0);
+            const lblTotalFramesBadge = document.getElementById("lblTotalFramesBadge");
+            if (lblTotalFramesBadge) {
+                lblTotalFramesBadge.innerText = `${totalFrames} frame${totalFrames === 1 ? '' : 's'} captured`;
+            }
+
+            // Top KPI Bar Updates
+            document.getElementById("lblCurrentCount").innerText = data.people_count;
+            document.getElementById("lblCurrentOccupancyPct").innerText = `${data.occupancy_percentage}%`;
+            document.getElementById("lblDensityLevel").innerText = data.density_level;
+            document.getElementById("lblOccupancyStatus").innerText = data.occupancy_status;
+            document.getElementById("lblDensitySub").innerText = `Threshold: ${data.density_level}`;
+
+            // Future Crowd Density Prediction Details (Located after captured frames)
+            const fc = data.forecasting;
+            const predWaitingState = document.getElementById("predictionWaitingState");
+            const predActiveDetails = document.getElementById("predictionActiveDetails");
+
+            if (fc && totalFrames > 0) {
+                if (predWaitingState) predWaitingState.style.display = "none";
+                if (predActiveDetails) predActiveDetails.style.display = "block";
+
+                // Top KPI card items
+                document.getElementById("lblFutureCount").innerText = fc.future_crowd_count;
+                document.getElementById("lblTrendDirection").innerText = fc.trend_direction;
+                document.getElementById("lblVelocityPerMin").innerText = (fc.slope_per_min >= 0 ? "+" : "") + fc.slope_per_min;
+
+                // Dedicated Future Prediction Card Elements
+                const predDensityBadge = document.getElementById("lblPredDensityLevel");
+                const predDensitySub = document.getElementById("lblPredDensitySub");
+                if (predDensityBadge) {
+                    predDensityBadge.innerText = fc.future_density_level;
+                    if (fc.future_density_level === "Low") {
+                        predDensityBadge.className = "badge bg-success px-2 py-1 fs-6";
+                        if (predDensitySub) predDensitySub.innerText = "(< 50 people)";
+                    } else if (fc.future_density_level === "Medium") {
+                        predDensityBadge.className = "badge bg-info text-dark px-2 py-1 fs-6";
+                        if (predDensitySub) predDensitySub.innerText = "(50 - 200 people)";
+                    } else if (fc.future_density_level === "High") {
+                        predDensityBadge.className = "badge bg-warning text-dark px-2 py-1 fs-6";
+                        if (predDensitySub) predDensitySub.innerText = "(200 - 500 people)";
+                    } else {
+                        predDensityBadge.className = "badge bg-danger px-2 py-1 fs-6";
+                        if (predDensitySub) predDensitySub.innerText = "(>= 500 people)";
+                    }
+                }
+
+                if (document.getElementById("lblPredFutureCount")) {
+                    document.getElementById("lblPredFutureCount").innerText = fc.future_crowd_count;
+                }
+                if (document.getElementById("lblPredOccupancyPct")) {
+                    document.getElementById("lblPredOccupancyPct").innerText = `${fc.future_occupancy_percentage}%`;
+                }
+                if (document.getElementById("lblPredOccupancyStatus")) {
+                    document.getElementById("lblPredOccupancyStatus").innerText = fc.future_occupancy_status;
+                }
+                if (document.getElementById("lblPredVelocity")) {
+                    document.getElementById("lblPredVelocity").innerText = (fc.slope_per_min >= 0 ? "+" : "") + fc.slope_per_min + "/min";
+                }
+                if (document.getElementById("lblPredTrendDir")) {
+                    document.getElementById("lblPredTrendDir").innerText = fc.trend_direction;
+                }
+                if (document.getElementById("lblPredNarrative")) {
+                    document.getElementById("lblPredNarrative").innerText = fc.density_summary || "Temporal density trend extrapolated from captured frames.";
+                }
+                if (document.getElementById("lblPredHeadroom")) {
+                    const headroomVal = fc.capacity_headroom !== undefined ? fc.capacity_headroom : Math.max(0, (data.max_capacity - fc.future_crowd_count));
+                    document.getElementById("lblPredHeadroom").innerText = `${headroomVal} people`;
+                }
+                if (document.getElementById("lblPredTimeToCapacity")) {
+                    document.getElementById("lblPredTimeToCapacity").innerText = fc.time_to_capacity_text;
+                }
+                if (document.getElementById("lblPredConfidence")) {
+                    document.getElementById("lblPredConfidence").innerText = totalFrames >= 3 ? `R² ${fc.r_squared.toFixed(2)}` : `Preliminary (Sample ${totalFrames})`;
+                }
+
+                // Risk Badge
+                const riskBadge = document.getElementById("riskAlertBadge");
+                if (riskBadge) {
+                    if (fc.risk_alert.includes("Critical")) {
+                        riskBadge.className = "risk-badge risk-critical";
+                        riskBadge.innerHTML = `<i class="fas fa-triangle-exclamation me-1"></i> ${fc.risk_alert}`;
+                    } else if (fc.risk_alert.includes("Warning") || fc.risk_alert.includes("Risk") || fc.risk_alert.includes("Caution")) {
+                        riskBadge.className = "risk-badge risk-warning";
+                        riskBadge.innerHTML = `<i class="fas fa-circle-exclamation me-1"></i> ${fc.risk_alert}`;
+                    } else {
+                        riskBadge.className = "risk-badge risk-normal";
+                        riskBadge.innerHTML = `<i class="fas fa-shield-check me-1"></i> Normal`;
+                    }
+                }
+
+                // Multi-Step Horizons
+                const sf = fc.step_forecasts || [];
+                sf.forEach((step, idx) => {
+                    const i = idx + 1;
+                    const labelElem = document.getElementById(`chipLabel${i}`);
+                    const valElem = document.getElementById(`chipVal${i}`);
+                    const subElem = document.getElementById(`chipSub${i}`);
+                    if (labelElem) labelElem.innerText = `${step.time_label || '+' + step.horizon_seconds + 's'} Horizon`;
+                    if (valElem) valElem.innerText = step.predicted_count;
+                    if (subElem) subElem.innerText = `Density: ${step.density_level} (${step.occupancy_percentage}%)`;
+                });
+            }
+
+            // Update Log Table
+            updateHistoryTable(data.history);
+        }
+
+        // ---------------------------------------------------------------------
+        // Update History Table
+        // ---------------------------------------------------------------------
+        function updateHistoryTable(history) {
+            const tbody = document.getElementById("historyTableBody");
+            if (!history || history.length === 0) return;
+
+            let html = "";
+            const reversed = [...history].reverse();
+
+            reversed.forEach(item => {
+                let statusBadgeClass = "bg-secondary";
+                if (item.occupancy_pct >= 90) statusBadgeClass = "bg-danger";
+                else if (item.occupancy_pct >= 75) statusBadgeClass = "bg-warning text-dark";
+                else statusBadgeClass = "bg-info text-dark";
+
+                html += `
+                    <tr>
+                        <td><b>#${item.frame_number}</b></td>
+                        <td>${item.timestamp}</td>
+                        <td><span class="badge bg-dark border border-info text-info px-2">${item.count}</span></td>
+                        <td><span class="badge ${item.model_used === 'YOLOv8' ? 'bg-primary' : 'bg-purple'}">${item.model_used}</span></td>
+                        <td>${item.density_level}</td>
+                        <td>${item.occupancy_pct}%</td>
+                        <td><span class="badge ${statusBadgeClass}">${item.occupancy_status}</span></td>
+                        <td>
+                            <a href="${item.result_url}" target="_blank" class="btn btn-outline-info btn-sm py-0 px-2" title="Inspect Full Frame">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function toggleHistoryTable() {
+            const container = document.getElementById("historyTableContainer");
+            const btnText = document.getElementById("btnToggleHistoryText");
+            if (container.style.display === "none") {
+                container.style.display = "block";
+                btnText.innerText = "Collapse Log";
+            } else {
+                container.style.display = "none";
+                btnText.innerText = "Expand Log";
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Reset Session
+        // ---------------------------------------------------------------------
+        async function resetSession() {
+            if (!confirm("Are you sure you want to reset current monitoring session?")) return;
+
+            pauseMonitoring();
+            try {
+                await fetch(`/api/reset-session/${sessionId}/`, { method: "POST" });
+            } catch (e) {
+                console.warn(e);
+            }
+
+            sessionId = "stream_" + Math.random().toString(36).substring(2, 10);
+            frameCounter = 0;
+
+            document.getElementById("lblCurrentCount").innerText = "0";
+            document.getElementById("lblCurrentOccupancyPct").innerText = "0.0%";
+            document.getElementById("lblFutureCount").innerText = "--";
+            document.getElementById("lblTrendDirection").innerText = "Stable";
+            document.getElementById("lblVelocityPerMin").innerText = "+0.0";
+            document.getElementById("lblDensityLevel").innerText = "Low";
+            document.getElementById("lblOccupancyStatus").innerText = "Low Occupancy";
+
+            const predWaitingState = document.getElementById("predictionWaitingState");
+            const predActiveDetails = document.getElementById("predictionActiveDetails");
+            if (predWaitingState) predWaitingState.style.display = "block";
+            if (predActiveDetails) predActiveDetails.style.display = "none";
+
+            const lblTotalFramesBadge = document.getElementById("lblTotalFramesBadge");
+            if (lblTotalFramesBadge) lblTotalFramesBadge.innerText = "0 frames captured";
+
+            processedFrameImg.style.display = "none";
+            resultPlaceholder.style.display = "block";
+            resultHud.style.display = "none";
+
+            document.getElementById("historyTableBody").innerHTML = `
+                <tr>
+                    <td colspan="8" class="text-center text-white-50 py-3 small">
+                        Session cleared. Use "Capture Frame" or "Start Monitoring" above to capture video frames.
+                    </td>
+                </tr>
+            `;
+
+            btnDownloadReport.classList.add("disabled");
+        }
+    </script>
+</body>
+</html>

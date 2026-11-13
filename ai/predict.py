@@ -1,6 +1,11 @@
 import os
+import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import cv2
-from networkx import density
 import torch
 import numpy as np
 from PIL import Image
@@ -50,7 +55,7 @@ transform = transforms.Compose([
 # Prediction Function
 # ---------------------------------------
 
-def predict_image(image_path):
+def predict_image(image_path, return_max=False):
 
     # Load Image
     image = Image.open(image_path).convert("RGB")
@@ -61,18 +66,33 @@ def predict_image(image_path):
 
     # Prediction
     with torch.no_grad():
-
         density = model(tensor)
 
     # Remove negative values
     density = torch.relu(density)
 
-    print("Maximum :", density.max().item())
-    print("Minimum :", density.min().item())
-    print("Sum :", density.sum().item())
+    max_val = float(density.max().item())
+    sum_val = float(density.sum().item())
 
-    # Crowd Count
-    count = density.sum().item()
+    # Background sensor noise suppression:
+    # If the peak spatial density is below 0.0018, it represents empty background texture.
+    if max_val < 0.0018:
+        count = 0.0
+    else:
+        # Subtract background baseline noise floor:
+        noise_floor = min(0.0003, max_val * 0.08)
+        cleaned_density = torch.clamp(density - noise_floor, min=0.0)
+        count = float(cleaned_density.sum().item())
+        # Scale slightly to match true crowd calibration
+        scale_factor = sum_val / max(1.0, count) if count > 0 else 1.0
+        count = min(sum_val, count * min(1.3, scale_factor))
+
+    rounded_count = int(round(count))
+
+    print("Maximum :", max_val)
+    print("Minimum :", density.min().item())
+    print("Raw Sum :", sum_val)
+    print("Calibrated Count :", rounded_count)
 
     # Convert to numpy
     density_map = density.squeeze().cpu().numpy()
@@ -121,9 +141,9 @@ def predict_image(image_path):
     # Save heatmap
     filename = os.path.basename(image_path)
 
-    name, ext = os.path.splitext(filename)
+    name, _ = os.path.splitext(filename)
 
-    heatmap_name = f"{name}_heatmap{ext}"
+    heatmap_name = f"{name}_heatmap.png"
 
     heatmap_path = os.path.join(
         os.path.dirname(image_path),
@@ -135,4 +155,7 @@ def predict_image(image_path):
         overlay
     )
 
-    return int(round(count)), heatmap_path
+    if return_max:
+        return rounded_count, heatmap_path, max_val
+
+    return rounded_count, heatmap_path
